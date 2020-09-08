@@ -82,14 +82,7 @@ class Non_Word:
 	def __repr__(self):
 		return 'NON_WORD'
 
-NON_WORD = Non_Word()
-
-class Tuple_with_Multiplicity(tuple):
-	pass
-	# def __new__(cls,obj,mult):
-	# 	my_object = super().__new__(cls,obj)
-	# 	my_object.mult = mult
-	# 	return my_object		
+NON_WORD = Non_Word()		
 
 class Markov(list):
 	def __init__(self,n):
@@ -109,30 +102,16 @@ class Markov(list):
 		if not list_of_lists:
 			my_list = [my_list]
 
-		i = 0
-		max_length = len(my_list)
-		while i < max_length:
-		# for i in range(len(my_list)):
+		for i in range(len(my_list)):
 			my_list[i] = [NON_WORD]*self.n + list(my_list[i]) + [NON_WORD]
 			my_list[i] = tuple(my_list[i])
-			my_sum = 1
-			j = i+1
-			while j < max_length:
-				if my_list[j] == my_list[i]:
-					my_sum += 1
-					max_length -= 1
-					my_list.pop(j)
-				j += 1
-			my_list[i] = Tuple_with_Multiplicity(my_list[i])
-			my_list[i].mult = my_sum
-			i += 1
 
-		# if ignore_repeated:
-		# 	freq_dict = dict((x,1) for x in my_list)
-		# else:
-		# 	freq_dict = dict((x,sum(1 for y in my_list if y==x)) for x in my_list)
+		if ignore_repeated:
+			freq_dict = dict((x,1) for x in my_list)
+		else:
+			freq_dict = dict((x,sum(1 for y in my_list if y==x)) for x in my_list)
 
-		# my_list = list(set(my_list))
+		my_list = list(set(my_list))
 
 		progress = 0
 		count = 0
@@ -147,10 +126,10 @@ class Markov(list):
 				
 				my_obj = self.get_prefix(my_prefix)
 				if my_obj != None:
-					my_obj.add_suffix(p[i+self.n],multiplicity=p.mult)
+					my_obj.add_suffix(p[i+self.n],multiplicity=freq_dict[p])
 				else:
 					my_prefix = Prefix(my_prefix)
-					my_prefix.add_suffix(p[i+self.n],multiplicity=p.mult)
+					my_prefix.add_suffix(p[i+self.n],multiplicity=freq_dict[p])
 					self.append(my_prefix)
 
 			count += 1
