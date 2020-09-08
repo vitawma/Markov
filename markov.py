@@ -30,10 +30,10 @@ class Prefix(tuple):
 		my_object.sum = 0
 		return my_object
 
-	def add_suffix(self,suffix):
+	def add_suffix(self,suffix,multiplicity=1):
 		for s in self.suffixes:
 			if suffix == s:
-				s.mult += 1
+				s.mult += 1*multiplicity
 				return
 		self.suffixes.append(Suffix(suffix))
 
@@ -84,6 +84,13 @@ class Non_Word:
 
 NON_WORD = Non_Word()
 
+class Tuple_with_Multiplicity(tuple):
+	pass
+	# def __new__(cls,obj,mult):
+	# 	my_object = super().__new__(cls,obj)
+	# 	my_object.mult = mult
+	# 	return my_object		
+
 class Markov(list):
 	def __init__(self,n):
 		self.n = n
@@ -95,15 +102,37 @@ class Markov(list):
 	def get_random_prefix(self):
 		return random.choice(self)
 
-	def build_chain(self,my_list,list_of_lists=False):
+	def build_chain(self,my_list,list_of_lists=False,ignore_repeated=False):
 		if len(my_list) < self.n + 1:
 			print('Impossible to build chain, too little data')
 
 		if not list_of_lists:
 			my_list = [my_list]
 
-		for i in range(len(my_list)):
+		i = 0
+		max_length = len(my_list)
+		while i < max_length:
+		# for i in range(len(my_list)):
 			my_list[i] = [NON_WORD]*self.n + list(my_list[i]) + [NON_WORD]
+			my_list[i] = tuple(my_list[i])
+			my_sum = 1
+			j = i+1
+			while j < max_length:
+				if my_list[j] == my_list[i]:
+					my_sum += 1
+					max_length -= 1
+					my_list.pop(j)
+				j += 1
+			my_list[i] = Tuple_with_Multiplicity(my_list[i])
+			my_list[i].mult = my_sum
+			i += 1
+
+		# if ignore_repeated:
+		# 	freq_dict = dict((x,1) for x in my_list)
+		# else:
+		# 	freq_dict = dict((x,sum(1 for y in my_list if y==x)) for x in my_list)
+
+		# my_list = list(set(my_list))
 
 		progress = 0
 		count = 0
@@ -118,10 +147,10 @@ class Markov(list):
 				
 				my_obj = self.get_prefix(my_prefix)
 				if my_obj != None:
-					my_obj.add_suffix(p[i+self.n])
+					my_obj.add_suffix(p[i+self.n],multiplicity=p.mult)
 				else:
 					my_prefix = Prefix(my_prefix)
-					my_prefix.add_suffix(p[i+self.n])
+					my_prefix.add_suffix(p[i+self.n],multiplicity=p.mult)
 					self.append(my_prefix)
 
 			count += 1
@@ -165,7 +194,7 @@ In statistics a contingency table '''#(also known as a cross tabulation or cross
 
 	n = 4
 	a = Markov(n)
-	a.build_chain(my_list,list_of_lists=True)
+	a.build_chain(my_list,list_of_lists=True,ignore_repeated=False)
 	
 	print('-'*50)
 	print('-'*50)
