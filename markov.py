@@ -51,26 +51,17 @@ class Prefix(tuple):
 			print('%.2f%%\t%s' % (self.prob_table[i]*100,
 								  str(self.suffixes[i].obj)))
 
-	def give(self,no_non_word=False):
+	def give(self):
 		if self.prob_table == []:
 			self.create_prob_table()
 		r = random.random()
 		for i in range(len(self.prob_table)):
 			if r < self.prob_table[i]:
-				if no_non_word and self.suffixes[i].obj == NON_WORD:
-					self.give(no_non_word=True)
-				else:
-					return self.suffixes[i].obj
+				return self.suffixes[i].obj
 
 
 	def __eq__(self,other):
-		if len(other) != len(self):
-			return False
-		for i in range(len(self)):
-			if self[i] != other[i]:
-				return False
-		return True
-		# return super(tuple,self).__eq__(other)
+		return super(tuple,self).__eq__(other)
 
 	def __repr__(self):
 		s =  'Prefix = ('
@@ -90,8 +81,6 @@ class Non_Word:
 		return 'NON_WORD'
 	def __repr__(self):
 		return 'NON_WORD'
-	def __eq__(self,other):
-		return type(other) == Non_Word
 
 NON_WORD = Non_Word()
 
@@ -113,54 +102,27 @@ class Markov(list):
 		if not list_of_lists:
 			my_list = [my_list]
 
-		for p in my_list:
-			for i in range(min(self.n,len(p))):
-				my_prefix = Prefix((NON_WORD,)*(self.n-i) +
-								   tuple(p[0:i]))
-
-				if my_prefix in self:
-					my_prefix = self.get_prefix(my_prefix)
-				else:
-					self.append(my_prefix)
-
-				if i < len(p):
-					my_prefix.add_suffix(p[i])
-				else:
-					my_prefix.add_suffix(NON_WORD)
-
-			'''fazer a mesma coisa para o final da palavra'''
-			'''o único sufixo possível deve ser NON_WORD'''
-			for i in range(1,min(self.n,len(p))+1):
-				my_prefix = Prefix(tuple(p[-i:]) + (NON_WORD,)*(self.n-i))
-				if my_prefix in self:
-					my_prefix = self.get_prefix(my_prefix)
-				else:
-					self.append(my_prefix)
-				my_prefix.add_suffix(NON_WORD)
+		for i in range(len(my_list)):
+			my_list[i] = [NON_WORD]*self.n + list(my_list[i]) + [NON_WORD]
 
 		progress = 0
 		count = 0
 		for p in my_list:
 			if count / len(my_list) > progress + 0.1:
-				print("%2d%%" % ((progress+0.1)*100))
 				progress += 0.1
+				print("%2d%%" % (progress*100))
 
-			for i in range(1,len(p)-self.n+1):
+			for i in range(len(p)-self.n):
 				
-				my_prefix = to_tuple(p[i:i+self.n])
+				my_prefix = tuple(p[i:i+self.n])
 				
 				my_obj = self.get_prefix(my_prefix)
 				if my_obj != None:
-					if i + self.n < len(p):
-						my_obj.add_suffix(p[i+self.n])
-					else:
-						my_obj.add_suffix(NON_WORD)
+					my_obj.add_suffix(p[i+self.n])
 				else:
-					self.append(Prefix(my_prefix))
-					if i + self.n < len(p):
-						self[-1].add_suffix(p[i+self.n])
-					else:
-						self[-1].add_suffix(NON_WORD)
+					my_prefix = Prefix(my_prefix)
+					my_prefix.add_suffix(p[i+self.n])
+					self.append(my_prefix)
 
 			count += 1
 
@@ -180,48 +142,44 @@ def to_tuple(x):
 	except TypeError:
 		return(x,)
 
+def replace_all(s,sub,my_list):
+	for p in my_list:
+		s = s.replace(p,sub)
+	return s
+
 def test_1():
 	my_str = '''
-In statistics a contingency table (also known as a cross tabulation or crosstab) is a type of table'''# in a matrix format that displays the (multivariate) frequency distribution of the variables. They are heavily used in survey research, business intelligence, engineering and scientific research. They provide a basic picture of the interrelation between two variables and can help find interactions between them. The term contingency table was first used by Karl Pearson in "On the Theory of Contingency and Its Relation to Association and Normal Correlation",[1] part of the Drapers' Company Research Memoirs Biometric Series I published in 1904.
+In statistics a contingency table '''#(also known as a cross tabulation or crosstab) is a type of table in a matrix format that displays the (multivariate) frequency distribution of the variables. They are heavily used in survey research, business intelligence, engineering and scientific research. They provide a basic picture of the interrelation between two variables and can help find interactions between them. The term contingency table was first used by Karl Pearson in "On the Theory of Contingency and Its Relation to Association and Normal Correlation",[1] part of the Drapers' Company Research Memoirs Biometric Series I published in 1904.
 # A crucial problem of multivariate statistics is finding the (direct-)dependence structure underlying the variables contained in high-dimensional contingency tables. If some of the conditional independences are revealed, then even the storage of the data can be done in a smarter way (see Lauritzen (2002)). In order to do this one can use information theory concepts, which gain the information only from the distribution of probability, which can be expressed easily from the contingency table by the relative frequencies.
 # A pivot table is a way to create contingency tables using spreadsheet software. 
 # The numbers of the males, females, and right- and left-handed individuals are called marginal totals. The grand total (the total number of individuals represented in the contingency table) is the number in the bottom right corner.
 # The table allows users to see at a glance that the proportion of men who are right handed is about the same as the proportion of women who are right handed although the proportions are not identical. The strength of the association can be measured by the odds ratio, and the population odds ratio estimated by the sample odds ratio. The significance of the difference between the two proportions can be assessed with a variety of statistical tests including Pearson's chi-squared test, the G-test, Fisher's exact test, Boschloo's test and Barnard's test, provided the entries in the table represent individuals randomly sampled from the population about which conclusions are to be drawn. If the proportions of individuals in the different columns vary significantly between rows (or vice versa), it is said that there is a contingency between the two variables. In other words, the two variables are not independent. If there is no contingency, it is said that the two variables are independent.
 # The example above is the simplest kind of contingency table, a table in which each variable has only two levels; this is called a 2 × 2 contingency table. In principle, any number of rows and columns may be used. There may also be more than two variables, but higher order contingency tables are difficult to represent visually. The relation between ordinal variables, or between ordinal and categorical variables, may also be represented in contingency tables, although such a practice is rare. For more on the use of a contingency table for the relation between two ordinal variables, see Goodman and Kruskal's gamma. 
 # '''
-	#my_str = open('bible.txt','r').read()
+	my_str = open('bible.txt','r').read()
+
 	my_str = my_str.replace('\n',' ')
-	my_str = my_str.replace('(',' ')
-	my_str = my_str.replace(')',' ')
-	my_str = my_str.replace(',',' ')
+	my_str = replace_all(my_str,'','(),.:;?#0123456789')
 	my_list = my_str.lower().split()
 	print(my_list)
 
-	n = 2
+	n = 4
 	a = Markov(n)
 	a.build_chain(my_list,list_of_lists=True)
-	print(a)
-	r = a.get_prefix(to_tuple('i'))
 	
 	print('-'*50)
-	# print(r)
 	print('-'*50)
-	# r = a.get_prefix(to_tuple(NON_WORD))
-	# print(r)
 	prefix = a.get_random_prefix()
-	print(prefix)
-	for i in range(100):
-		s = prefix.give(no_non_word=False)
+
+	for i in range(5000):
+		s = prefix.give()
 		if s==NON_WORD:
 			print(' ', end='')
+			new = (NON_WORD,)*a.n
 		else:
 			print(s, end='')
-		novo = prefix[1:] + to_tuple(s)
-		print(novo)
-		print(prefix[1:])
-		print(to_tuple(s))
-		prefix = a.get_prefix(prefix[1:] + to_tuple(s))
-		print(prefix)
+			new = prefix[1:] + to_tuple(s)
+		prefix = a.get_prefix(new)
 
 # import cProfile
 # cProfile.run('test_1()')
