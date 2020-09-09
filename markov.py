@@ -102,6 +102,7 @@ class Markov(list):
 	def __init__(self,n):
 		self.n = n
 		self.prefix_freq = []
+		self.char_freq = []
 
 	def get_prefix(self,my_prefix):
 		my_prefix = to_tuple(my_prefix)
@@ -110,9 +111,10 @@ class Markov(list):
 	def get_random_prefix(self):
 		return random.choice(self)
 
-	def build_chain(self,my_list,list_of_lists=False,ignore_repeated=False):
-		if len(my_list) < self.n + 1:
-			print('Impossible to build chain, too little data')
+	def build_chain(self,my_list,freq_list=None,list_of_lists=False,
+					ignore_repeated=False,from_freq_list=False):
+		# if len(my_list) < self.n + 1:
+		# 	print('Impossible to build chain, too little data')
 
 		if not list_of_lists:
 			my_list = [my_list]
@@ -121,10 +123,13 @@ class Markov(list):
 			my_list[i] = [NON_WORD]*self.n + list(my_list[i]) + [NON_WORD]
 			my_list[i] = tuple(my_list[i])
 
-		if ignore_repeated:
-			freq_dict = dict((x,1) for x in my_list)
+		if freq_list != None:
+			freq_dict = {my_list[i]: freq_list[i] for i in range(len(my_list))}
 		else:
-			freq_dict = Counter(my_list)
+			if ignore_repeated:
+				freq_dict = {x: 1 for x in my_list}
+			else:
+				freq_dict = Counter(my_list)
 
 		my_list = list(set(my_list))
 
@@ -159,43 +164,63 @@ class Markov(list):
 			s += "%s : %d (%.2f per 10,000)\n" % (p[0].short_str(), p[1], p[1]*10000/self.sum_prefix)
 		print(s)
 
-	def get_many_expected_freq(self):
+	def build_char_freq_list(self):
 		if self.prefix_freq == []:
 			self.build_prefix_freq_list()
-		my_list = sorted(self.prefix_freq.items(), key=lambda x: x[1], reverse=True)
-		for i in range(5):
-			self.get_expected_freq(my_list[i])
 
-	def get_expected_freq(self,my_prefix):
-		my_prefix = tuple(my_prefix)
-
-		if self.prefix_freq == []:
-			self.build_prefix_freq_list()
 		char_list = set(y for x in self for y in x)
 		self.char_freq = {w: sum(x.get_sum() for x in self for y in x if y == w) for w in char_list}
 		self.sum_char = sum(self.char_freq[c] for c in self.char_freq)
 		self.char_prob = {x: self.char_freq[x]/self.sum_char for x in char_list}
 
 		my_list = sorted(self.char_freq, key=lambda x: self.char_freq[x], reverse=True)
+		
 		s = "Total number of chars: %d\n" % self.sum_char
 		s += '-'*50 + '\n'
 		for c in my_list:
 			s += "%2s : %5d (%2.2f%%)\n" % (c,self.char_freq[c],self.char_prob[c]*100)
 		print(s)
 
+	def get_many_expected_freq(self):
+		my_list = sorted(self.prefix_freq.items(), key=lambda x: x[1], reverse=True)
+		my_dic = dict()
+		for i in range(100):
+			my_dic[my_list[i][0]] = self.get_expected_freq(my_list[i][0])
+
+		my_list = sorted(my_dic.items(), key=lambda x: x[1], reverse=True)
+		for p in my_list:
+			print(p[0])
+			freq = self.prefix_freq[p[0]]
+			print('freq: %d (%2.5f%%), std_dev: %.2f' % (freq,freq/self.sum_prefix,my_dic[p[0]]))
+
+	def get_expected_freq(self,my_prefix,print_it=False):
+		my_prefix = tuple(my_prefix)
+		if self.char_freq == []:
+			self.build_char_freq_list()
+
+		s = '\ndesired prefix: ' + str(my_prefix) + '\n'
+
 		prob = 1
 		for k in my_prefix:
-			print("prob(%s)=%2.5f%%" % (k,self.char_prob[k]*100))
+			s += "prob(%s)=%2.5f%%" % (k,self.char_prob[k]*100)
 			prob *= self.char_prob[k]
-		print('-'*25)
+		s += '-'*25
+		n = self.prefix_freq[my_prefix]
 		mu = prob*self.sum_prefix
 		sigma = (self.sum_prefix*prob*(1-prob))**0.5
-		n = self.prefix_freq[my_prefix]
-		print('final prob: %-5.5f%%' % (prob*100))
-		print('expected  : %-5.2f' % mu)
-		print('deviation : %-5.2f' % sigma)
-		print('found     : %-5d' % n)
-		print('prob of finding that many, or more: %.5f%%' % ((1-general_cdf(n,mu,sigma))*100))
+		std_dev = abs(n-mu)/sigma
+		
+		s += 'final prob: %-5.5f%%' % (prob*100)
+		s += 'expected  : %-5.2f' % mu
+		s += 'deviation : %-5.2f' % sigma
+		s += 'found     : %-5d' % n
+		s += 'std_deviations from mean : %.5f' % std_dev
+		s += 'prob of finding that many, or more: %.5f%%' % ((1-general_cdf(n,mu,sigma))*100)
+
+		if print_it:
+			print(s)
+
+		return std_dev
 
 	def __repr__(self):
 		return __str__(self)
@@ -237,22 +262,34 @@ def test_1():
 	my_str = '''
 In statistics a contingency table #(also known as a cross tabulation or crosstab) is a type of table in a matrix format that displays the (multivariate) frequency distribution of the variables. They are heavily used in survey research, business intelligence, engineering and scientific research. They provide a basic picture of the interrelation between two variables and can help find interactions between them. The term contingency table was first used by Karl Pearson in "On the Theory of Contingency and Its Relation to Association and Normal Correlation",[1] part of the Drapers' Company Research Memoirs Biometric Series I published in 1904.
 # A crucial problem of multivariate statistics is finding the (direct-)dependence structure underlying the variables contained in high-dimensional contingency tables. If some of the conditional independences are revealed, then even the storage of the data can be done in a smarter way (see Lauritzen (2002)). In order to do this one can use information theory concepts, which gain the information only from the distribution of probability, which can be expressed easily from the contingency table by the relative frequencies.
-# A pivot table is a way to create contingency tables using spreadsheet software. '''
+# A pivot table is a way to create contingency tables using spreadsheet software.
 # The numbers of the males, females, and right- and left-handed individuals are called marginal totals. The grand total (the total number of individuals represented in the contingency table) is the number in the bottom right corner.
 # The table allows users to see at a glance that the proportion of men who are right handed is about the same as the proportion of women who are right handed although the proportions are not identical. The strength of the association can be measured by the odds ratio, and the population odds ratio estimated by the sample odds ratio. The significance of the difference between the two proportions can be assessed with a variety of statistical tests including Pearson's chi-squared test, the G-test, Fisher's exact test, Boschloo's test and Barnard's test, provided the entries in the table represent individuals randomly sampled from the population about which conclusions are to be drawn. If the proportions of individuals in the different columns vary significantly between rows (or vice versa), it is said that there is a contingency between the two variables. In other words, the two variables are not independent. If there is no contingency, it is said that the two variables are independent.
 # The example above is the simplest kind of contingency table, a table in which each variable has only two levels; this is called a 2 × 2 contingency table. In principle, any number of rows and columns may be used. There may also be more than two variables, but higher order contingency tables are difficult to represent visually. The relation between ordinal variables, or between ordinal and categorical variables, may also be represented in contingency tables, although such a practice is rare. For more on the use of a contingency table for the relation between two ordinal variables, see Goodman and Kruskal's gamma. 
 # '''
-	#my_str = open('bible.txt','r').read()
+	# my_str = open('bible.txt','r').read()
 
 	my_str = my_str.replace('\n',' ')
 	my_str = replace_all(my_str,'','()[]"\',.:;?#0123456789')
 	my_list = my_str.lower().split()
 
-	print(my_list)
+	my_list = []
+	my_freq = []
+	max_count = 10000
+	i = 0
+	with open('pt_br_50k.txt','r') as f:
+		line = f.readline().split()
+		while line != [] and (not max_count or i < max_count):
+			my_list.append(line[0])
+			my_freq.append(int(line[1]))
+			line = f.readline().split()
+			i += 1
 
-	n = 2
+	# print(my_list)
+
+	n = 4
 	a = Markov(n)
-	a.build_chain(my_list,list_of_lists=True,ignore_repeated=False)
+	a.build_chain(my_list,freq_list=my_freq,list_of_lists=True,ignore_repeated=False)
 	# print(a)
 	a.build_prefix_freq_list()
 	# a.get_expected_freq(('i','n'))
