@@ -38,9 +38,11 @@ class Prefix(tuple):
 	def add_suffix(self,suffix,multiplicity=1):
 		for s in self.suffixes:
 			if suffix == s:
-				s.mult += 1*multiplicity
+				s.mult += multiplicity
 				return
-		self.suffixes.append(Suffix(suffix))
+		my_suffix = Suffix(suffix)
+		my_suffix.mult = multiplicity
+		self.suffixes.append(my_suffix)
 
 	def create_prob_table(self):
 		self.get_sum()
@@ -122,11 +124,9 @@ class Markov(list):
 		if ignore_repeated:
 			freq_dict = dict((x,1) for x in my_list)
 		else:
-			freq_dict = dict((x,sum(1 for y in my_list if y==x)) for x in my_list)
+			freq_dict = Counter(my_list)
 
-		print(my_list)
 		my_list = list(set(my_list))
-		print(my_list)
 
 		progress = 0
 		for i in range(len(my_list)):
@@ -136,9 +136,7 @@ class Markov(list):
 				print("%2d%%" % (progress*100))
 
 			for j in range(len(p)-self.n):
-				
 				my_prefix = tuple(p[j:j+self.n])
-				print(my_prefix)
 				
 				my_obj = self.get_prefix(my_prefix)
 				if my_obj != None:
@@ -149,18 +147,27 @@ class Markov(list):
 					self.append(my_prefix)
 
 	def build_prefix_freq_list(self):
-		self.prefix_freq = {x.short_str(): x.get_sum() for x in self}
+		self.prefix_freq = {tuple(x): x.get_sum() for x in self}
 		self.sum_prefix = sum(self.prefix_freq[x] for x in self.prefix_freq)
+
+	def print_prefix_freq_list(self):
 		s = "Total number of prefixes: %d\n" % self.sum_prefix
 		s += "Different prefixes: %d\n" % len(self)
 		s += '-'*50 + '\n'
 		my_list = sorted(self.prefix_freq.items(), key=lambda x: x[1], reverse=True)
 		for p in my_list:
-			s += "%s : %d (%.2f per 10,000)\n" % (p[0], p[1], p[1]*10000/self.sum_prefix)
+			s += "%s : %d (%.2f per 10,000)\n" % (p[0].short_str(), p[1], p[1]*10000/self.sum_prefix)
 		print(s)
 
+	def get_many_expected_freq(self):
+		if self.prefix_freq == []:
+			self.build_prefix_freq_list()
+		my_list = sorted(self.prefix_freq.items(), key=lambda x: x[1], reverse=True)
+		for i in range(5):
+			self.get_expected_freq(my_list[i])
+
 	def get_expected_freq(self,my_prefix):
-		my_prefix = Prefix(my_prefix)
+		my_prefix = tuple(my_prefix)
 
 		if self.prefix_freq == []:
 			self.build_prefix_freq_list()
@@ -183,12 +190,12 @@ class Markov(list):
 		print('-'*25)
 		mu = prob*self.sum_prefix
 		sigma = (self.sum_prefix*prob*(1-prob))**0.5
-		n = self.prefix_freq[my_prefix.short_str()]
+		n = self.prefix_freq[my_prefix]
 		print('final prob: %-5.5f%%' % (prob*100))
 		print('expected  : %-5.2f' % mu)
 		print('deviation : %-5.2f' % sigma)
 		print('found     : %-5d' % n)
-		print('prob of finding that many: %.3f%%' % ((1-general_cdf(n,mu,sigma))*100))
+		print('prob of finding that many, or more: %.5f%%' % ((1-general_cdf(n,mu,sigma))*100))
 
 	def __repr__(self):
 		return __str__(self)
@@ -228,7 +235,7 @@ Total count = 13
 
 def test_1():
 	my_str = '''
-In statistics a contingency table #(also known as a cross tabulation or crosstab)'''# is a type of table in a matrix format that displays the (multivariate) frequency distribution of the variables. They are heavily used in survey research, business intelligence, engineering and scientific research. They provide a basic picture of the interrelation between two variables and can help find interactions between them. The term contingency table was first used by Karl Pearson in "On the Theory of Contingency and Its Relation to Association and Normal Correlation",[1] part of the Drapers' Company Research Memoirs Biometric Series I published in 1904.
+In statistics a contingency table #(also known as a cross tabulation or crosstab) is a type of table in a matrix format that displays the (multivariate) frequency distribution of the variables. They are heavily used in survey research, business intelligence, engineering and scientific research. They provide a basic picture of the interrelation between two variables and can help find interactions between them. The term contingency table was first used by Karl Pearson in "On the Theory of Contingency and Its Relation to Association and Normal Correlation",[1] part of the Drapers' Company Research Memoirs Biometric Series I published in 1904.
 # A crucial problem of multivariate statistics is finding the (direct-)dependence structure underlying the variables contained in high-dimensional contingency tables. If some of the conditional independences are revealed, then even the storage of the data can be done in a smarter way (see Lauritzen (2002)). In order to do this one can use information theory concepts, which gain the information only from the distribution of probability, which can be expressed easily from the contingency table by the relative frequencies.
 # A pivot table is a way to create contingency tables using spreadsheet software. '''
 # The numbers of the males, females, and right- and left-handed individuals are called marginal totals. The grand total (the total number of individuals represented in the contingency table) is the number in the bottom right corner.
@@ -243,13 +250,13 @@ In statistics a contingency table #(also known as a cross tabulation or crosstab
 
 	print(my_list)
 
-	n = 1
+	n = 2
 	a = Markov(n)
 	a.build_chain(my_list,list_of_lists=True,ignore_repeated=False)
-	print(a)
-	input()
+	# print(a)
 	a.build_prefix_freq_list()
 	# a.get_expected_freq(('i','n'))
+	a.get_many_expected_freq()
 	# a.get_expected_freq((NON_WORD,)*n)
 	exit()
 	
