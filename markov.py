@@ -7,9 +7,9 @@ import random, math
 from collections import Counter
 
 class Suffix:
-	def __init__(self,obj):
+	def __init__(self,obj,mult=1):
 		self.obj = obj
-		self.mult = 1
+		self.mult = mult
 
 	def __eq__(self,other):
 		if type(other) != Suffix:
@@ -28,6 +28,7 @@ class Prefix(tuple):
 		my_object = super().__new__(cls, my_tuple)
 		my_object.suffixes = []
 		my_object.prob_table = []
+		my_object.id = dict()
 		my_object.sum = 0
 		return my_object
 
@@ -35,13 +36,21 @@ class Prefix(tuple):
 		self.sum = sum(s.mult for s in self.suffixes)
 		return self.sum
 
-	def add_suffix(self,suffix,multiplicity=1):
+	def add_suffix(self,suffix,mult,my_id):
+		'''
+		id is the index of the word in the input vector
+		'''
+		if my_id in self.id:
+			self.id[my_id] += mult
+		else:
+			self.id[my_id] =  mult
+
 		for s in self.suffixes:
 			if suffix == s:
-				s.mult += multiplicity
+				s.mult += mult
+				#s.id.append(my_id)
 				return
-		my_suffix = Suffix(suffix)
-		my_suffix.mult = multiplicity
+		my_suffix = Suffix(suffix,mult)
 		self.suffixes.append(my_suffix)
 
 	def create_prob_table(self):
@@ -103,6 +112,8 @@ class Markov(list):
 		self.n = n
 		self.prefix_freq = []
 		self.char_freq = []
+		self.input = Markov_Input([],[])
+		self.sum_prefix = 0
 
 	def get_prefix(self,my_prefix):
 		my_prefix = to_tuple(my_prefix)
@@ -111,32 +122,22 @@ class Markov(list):
 	def get_random_prefix(self):
 		return random.choice(self)
 
-	def build_chain(self,my_list,freq_list=None,list_of_lists=False,
-					ignore_repeated=False,from_freq_list=False):
-		# if len(my_list) < self.n + 1:
-		# 	print('Impossible to build chain, too little data')
+	def build_chain(self,my_input):
+		'''
+		Markov_Input -> None
+		Starting with a Markov_Input (list + corresponding freq. list), this builds
+		the Markov chain for them. Any base elements are accepted.
+		'''
 
-		if not list_of_lists:
-			my_list = [my_list]
+		self.input = my_input
 
-		for i in range(len(my_list)):
-			my_list[i] = [NON_WORD]*self.n + list(my_list[i]) + [NON_WORD]
-			my_list[i] = tuple(my_list[i])
-
-		if freq_list != None:
-			freq_dict = {my_list[i]: freq_list[i] for i in range(len(my_list))}
-		else:
-			if ignore_repeated:
-				freq_dict = {x: 1 for x in my_list}
-			else:
-				freq_dict = Counter(my_list)
-
-		my_list = list(set(my_list))
+		for p in self.input.input:
+			self.input.transf_input.append(tuple([NON_WORD]*self.n + list(p) + [NON_WORD]))
 
 		progress = 0
-		for i in range(len(my_list)):
-			p = my_list[i]
-			if i / len(my_list) > progress + 0.1:
+		for i in range(len(self.input.transf_input)):
+			p = self.input.transf_input[i]
+			if i / len(self.input.transf_input) > progress + 0.1:
 				progress += 0.1
 				print("%2d%%" % (progress*100))
 
@@ -145,11 +146,14 @@ class Markov(list):
 				
 				my_obj = self.get_prefix(my_prefix)
 				if my_obj != None:
-					my_obj.add_suffix(p[j+self.n],multiplicity=freq_dict[p])
+					my_obj.add_suffix(p[j+self.n],mult=self.input.freq[i],my_id=i)
 				else:
 					my_prefix = Prefix(my_prefix)
-					my_prefix.add_suffix(p[j+self.n],multiplicity=freq_dict[p])
+					my_prefix.add_suffix(p[j+self.n],mult=self.input.freq[i],my_id=i)
 					self.append(my_prefix)
+
+		self.build_prefix_freq_list()
+		self.build_char_freq_list()
 
 	def build_prefix_freq_list(self):
 		self.prefix_freq = {tuple(x): x.get_sum() for x in self}
@@ -165,21 +169,32 @@ class Markov(list):
 		print(s)
 
 	def build_char_freq_list(self):
-		if self.prefix_freq == []:
-			self.build_prefix_freq_list()
-
 		char_list = set(y for x in self for y in x)
-		self.char_freq = {w: sum(x.get_sum() for x in self for y in x if y == w) for w in char_list}
+		temp_char_freq = {w: sum(x.get_sum() for x in self for y in x if y == w) for w in char_list}
+		my_list = sorted(temp_char_freq, key=lambda x: temp_char_freq[x], reverse=True)
+		self.char_freq = {c: temp_char_freq[c] for c in my_list}
 		self.sum_char = sum(self.char_freq[c] for c in self.char_freq)
-		self.char_prob = {x: self.char_freq[x]/self.sum_char for x in char_list}
-
-		my_list = sorted(self.char_freq, key=lambda x: self.char_freq[x], reverse=True)
+		self.char_prob = {c: self.char_freq[c]/self.sum_char for c in self.char_freq}
 		
+	def print_char_freq_list(self):
 		s = "Total number of chars: %d\n" % self.sum_char
-		s += '-'*50 + '\n'
-		for c in my_list:
+		s += '-'*30 + '\n'
+		for c in self.char_freq:
 			s += "%2s : %5d (%2.2f%%)\n" % (c,self.char_freq[c],self.char_prob[c]*100)
 		print(s)
+
+	def id_str(self,prefix,long=True):
+		'''
+		internal info -> str
+		'''
+		my_prefix = self.get_prefix(prefix)
+		my_list = []
+		for _id in sorted(my_prefix.id, key=lambda x: my_prefix.id[x], reverse=True):
+			s = str(self.input.input[_id])
+			if long and my_prefix.id[_id] > 1:
+				s += '({:d})'.format(my_prefix.id[_id])
+			my_list.append(s)
+		return ','.join(my_list)
 
 	def get_many_expected_freq(self):
 		my_list = sorted(self.prefix_freq.items(), key=lambda x: x[1], reverse=True)
@@ -188,15 +203,22 @@ class Markov(list):
 			my_dic[my_list[i][0]] = self.get_expected_freq(my_list[i][0])
 
 		my_list = sorted(my_dic.items(), key=lambda x: x[1], reverse=True)
+		print("{:^10} | {:^7} | {:^7} | {:^7} | {:^30}".format('prefix','freq.','%freq.','st.dev.','examples') )
+		print('-'*80)
 		for p in my_list:
-			print(p[0])
 			freq = self.prefix_freq[p[0]]
-			print('freq: %d (%2.5f%%), std_dev: %.2f' % (freq,freq/self.sum_prefix,my_dic[p[0]]))
+			print_dict = {'prefix'  : str(p[0]),
+						  'freq'    : freq,
+						  'rel_freq': freq/self.sum_prefix,
+						  'std_dev' : my_dic[p[0]],
+						  'examples': self.id_str(p[0],long=True)}
+
+			# print("{:^.20}".format(self.id_str(p[0])))
+			print(('{d[prefix]:^10} | {d[freq]:^7d} | {d[rel_freq]:^7.4f} ' +
+				'| {d[std_dev]:^7.1f} | {d[examples]:^.30}').format(d=print_dict))
 
 	def get_expected_freq(self,my_prefix,print_it=False):
 		my_prefix = tuple(my_prefix)
-		if self.char_freq == []:
-			self.build_char_freq_list()
 
 		s = '\ndesired prefix: ' + str(my_prefix) + '\n'
 
@@ -244,34 +266,66 @@ def replace_all(s,sub,my_list):
 		s = s.replace(my_list[i],sub)
 	return s
 
-'''
-Prefix = (NW)
-Suffixes:
-i, mult. 1
-c, mult. 3
-t, mult. 2
-s, mult. 1
-a, mult. 4
-o, mult. 1
-k, mult. 1
-----------
-Total count = 13
-'''
+class Char:
+	def __init__(self,symbol,freq,rel_freq):
+		self.symbol   = symbol
+		self.freq     = freq
+		self.rel_freq = rel_freq
+
+class Markov_Input:
+	def __init__(self,my_list,freq_list):
+		'''
+		The input should not contain repeated elements.
+		To prepare input from an arbitrary list, use the
+		auxiliary functions.'''
+		self.input = my_list
+		self.freq = freq_list
+		self.transf_input = []
+		self.str_limit = 10
+
+	def str_preprocess(my_str, split=True):
+		'''
+		str -> Markov_Input
+		'''
+		my_str = my_str.replace('\n',' ')
+		my_str = replace_all(my_str,'','()[]"\',.:;?#0123456789')
+		my_str = my_str.lower()
+		if split:
+			my_list = my_str.split()
+		else:
+			my_list = [my_str]
+		return Markov_Input.other_preprocess(my_list)
+
+	def other_preprocess(my_list):
+		'''
+		list -> Markov_Input
+		'''
+		# my_dict = Counter(my_list)
+		my_sorted = sorted(Counter(my_list).items(), key=lambda x: x[1], reverse=True)
+		my_list2 = [x[0] for x in my_sorted]
+		freq_list = [x[1] for x in my_sorted]
+		return Markov_Input(my_list2, freq_list)
+
+	def __str__(self):
+		s = "%25s | %-10s\n" % ('input','frequency')
+		s += '-'*50 + '\n'
+		for i in range(min(len(self.input),self.str_limit)):
+			s += "%25s | %-10s\n" % (self.input[i], self.freq[i])
+		return s
 
 def test_1():
 	my_str = '''
 In statistics a contingency table #(also known as a cross tabulation or crosstab) is a type of table in a matrix format that displays the (multivariate) frequency distribution of the variables. They are heavily used in survey research, business intelligence, engineering and scientific research. They provide a basic picture of the interrelation between two variables and can help find interactions between them. The term contingency table was first used by Karl Pearson in "On the Theory of Contingency and Its Relation to Association and Normal Correlation",[1] part of the Drapers' Company Research Memoirs Biometric Series I published in 1904.
 # A crucial problem of multivariate statistics is finding the (direct-)dependence structure underlying the variables contained in high-dimensional contingency tables. If some of the conditional independences are revealed, then even the storage of the data can be done in a smarter way (see Lauritzen (2002)). In order to do this one can use information theory concepts, which gain the information only from the distribution of probability, which can be expressed easily from the contingency table by the relative frequencies.
-# A pivot table is a way to create contingency tables using spreadsheet software.
+# A pivot table is a way to create contingency tables using spreadsheet software. ththththththth
 # The numbers of the males, females, and right- and left-handed individuals are called marginal totals. The grand total (the total number of individuals represented in the contingency table) is the number in the bottom right corner.
 # The table allows users to see at a glance that the proportion of men who are right handed is about the same as the proportion of women who are right handed although the proportions are not identical. The strength of the association can be measured by the odds ratio, and the population odds ratio estimated by the sample odds ratio. The significance of the difference between the two proportions can be assessed with a variety of statistical tests including Pearson's chi-squared test, the G-test, Fisher's exact test, Boschloo's test and Barnard's test, provided the entries in the table represent individuals randomly sampled from the population about which conclusions are to be drawn. If the proportions of individuals in the different columns vary significantly between rows (or vice versa), it is said that there is a contingency between the two variables. In other words, the two variables are not independent. If there is no contingency, it is said that the two variables are independent.
 # The example above is the simplest kind of contingency table, a table in which each variable has only two levels; this is called a 2 × 2 contingency table. In principle, any number of rows and columns may be used. There may also be more than two variables, but higher order contingency tables are difficult to represent visually. The relation between ordinal variables, or between ordinal and categorical variables, may also be represented in contingency tables, although such a practice is rare. For more on the use of a contingency table for the relation between two ordinal variables, see Goodman and Kruskal's gamma. 
 # '''
 	# my_str = open('bible.txt','r').read()
 
-	my_str = my_str.replace('\n',' ')
-	my_str = replace_all(my_str,'','()[]"\',.:;?#0123456789')
-	my_list = my_str.lower().split()
+	my_input = Markov_Input.str_preprocess(my_str)
+	print(my_input)
 
 	my_list = []
 	my_freq = []
@@ -284,14 +338,15 @@ In statistics a contingency table #(also known as a cross tabulation or crosstab
 			my_freq.append(int(line[1]))
 			line = f.readline().split()
 			i += 1
+	my_input = Markov_Input(my_list,my_freq)
 
-	# print(my_list)
-
-	n = 4
+	n = 2
 	a = Markov(n)
-	a.build_chain(my_list,freq_list=my_freq,list_of_lists=True,ignore_repeated=False)
+	# a.build_chain(my_list,freq_list=my_freq,list_of_lists=True,ignore_repeated=False)
+	# a.build_chain(my_list,list_of_lists=False,ignore_repeated=False)
+	a.build_chain(my_input)
 	# print(a)
-	a.build_prefix_freq_list()
+	a.print_char_freq_list()
 	# a.get_expected_freq(('i','n'))
 	a.get_many_expected_freq()
 	# a.get_expected_freq((NON_WORD,)*n)
