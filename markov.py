@@ -67,12 +67,17 @@ class Prefix(tuple):
 	def get_entropy(self,sqrt=True):
 		if len(self.id) == 1:
 			return 0
-		# print(self.id)
 		power = 0.5 ** sqrt
 		my_freq = [self.id[x]**power for x in self.id]
-		# print(my_freq)
-		# exit()
 		my_sum = sum(my_freq)
+		return -sum(x/my_sum*math.log(x/my_sum,2)
+			for x in my_freq)
+
+	def get_entropy_suff(self,sqrt=False):
+		if len(self.suffixes) == 1:
+			return 0
+		my_freq = [x.mult for x in self.suffixes]
+		my_sum  = sum(x.mult for x in self.suffixes)
 		return -sum(x/my_sum*math.log(x/my_sum,2)
 			for x in my_freq)
 
@@ -226,6 +231,10 @@ class Markov(list):
 		my_prefix = self.get_prefix(prefix)
 		return my_prefix.get_entropy()
 
+	def get_entropy_suff(self,prefix):
+		my_prefix = self.get_prefix(prefix)
+		return my_prefix.get_entropy_suff()
+
 	def id_str(self,prefix,long=True):
 		'''
 		internal info -> str
@@ -241,14 +250,15 @@ class Markov(list):
 
 	def get_many_expected_freq(
 			self,get_items=2000,print_items=200,memory=2,
-			ignore_NW=True,order_by='std*ent',
-			args=['prefix','st.dev','entr','std*ent','examples']):
+			ignore_NW=True,order_by='e.suf',descending=True,
+			args=['prefix','st.dev','entr','e.suf','examples']):
 
 		print_dic = {'prefix'  : ('{:^12}','{d[prefix]:>12}'   ,'Prefix.very_short_str(p)'     ),
 					 'freq'    : ('{:^10}','{d[freq]:>10d}'    ,'self.prefix_freq[p]'          ),
 					 'st.dev'  : ('{:^7}' ,'{d[st.dev]:>7d}'   ,
 					 	'int(self.get_expected_freq_new(p,memory=memory))'),
-					 'entr'    : ('{:^5}' ,'{d[entr]:>5.3f}'   ,'self.get_entropy(p)'          ),
+					 'entr'    : ('{:^5}' ,'{d[entr]:>5.2f}'   ,'self.get_entropy(p)'          ),
+					 'e.suf'   : ('{:^5}' ,'{d[e.suf]:>5.2f}','self.get_entropy_suff(p)'     ),
 					 'std*ent' : ('{:^8}' ,'{d[std*ent]:>8d}'  ,
 					 	'int(self.get_expected_freq_new(p,memory=memory)*self.get_entropy(p))'),
 					 'examples': ('{:^30}','{d[examples]:<.30}','self.id_str(p,long=False)'    )}
@@ -271,7 +281,8 @@ class Markov(list):
 			success += 1
 
 		print_items = min(print_items,get_items,len(my_dic))
-		my_list = sorted(my_dic, key=lambda x: my_dic[x][order_by], reverse=True)
+		# my_list = sorted(my_dic, key=lambda x: my_dic[x][order_by], reverse=descending)
+		my_list = sorted(my_dic, key=lambda x: my_dic[x]['entr']+3*my_dic[x]['e.suf'], reverse=True)
 		print("Memory = %d" % memory)
 		print(' | '.join(print_dic[a][0] for a in args).format(*args))
 		print('-'*80)
@@ -286,7 +297,7 @@ class Markov(list):
 
 		prob = 1
 		s += "prob(%s)=%2.5f%%\n" % (my_prefix[0],self.char_prob[my_prefix[0]]*100)
-		prob *= self.char_prob[my_prefix[0]]
+		# prob *= self.char_prob[my_prefix[0]]
 
 		for i in range(1,len(my_prefix)):
 			if memory==0:
@@ -421,24 +432,18 @@ def test_1():
 	# my_str = open('bible.txt','r').read()
 	# my_input = Markov_Input.str_preprocess(my_str)
 	
-	my_input = Markov_Input.gen_from_file('ru_50k.txt',max_line=3000)
+	my_input = Markov_Input.gen_from_file('de_50k.txt',max_line=5000)
 
 	print(my_input)
 
-	n = 4
+	n = 3
 	a = Markov(n)
 	a.build_chain(my_input)
 	# a.get_expected_freq(('t','i','o','n'),print_it=True)
-	word = (NON_WORD,)*4
-	a.get_expected_freq_new(word,print_it=True,memory=0)
-	a.get_expected_freq_new(word,print_it=True,memory=1)
-	a.get_expected_freq_new(word,print_it=True,memory=2)
-	a.get_expected_freq_new(word,print_it=True,memory=3)
-	a.get_many_expected_freq(ignore_NW=True,memory=0)
-	a.get_many_expected_freq(ignore_NW=True,memory=1)
-	a.get_many_expected_freq(ignore_NW=True,memory=2)
-	a.get_many_expected_freq(ignore_NW=True,memory=3)
-
+	word = (NON_WORD,)*n
+	for i in range(n):
+		a.get_expected_freq_new(word,print_it=True,memory=i)
+		a.get_many_expected_freq(ignore_NW=False,memory=i,order_by='e.suf',descending=False)
 	exit()
 	
 	print('-'*50)
